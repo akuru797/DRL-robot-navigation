@@ -280,7 +280,7 @@ epoch = 1
 
 count_rand_actions = 0
 random_action = []
-
+time.sleep(15) #Aleena edit so that gazebo can load before training
 # Begin the training loop
 while timestep < max_timesteps:
 
