@@ -164,68 +164,68 @@ for i_ep in range(num_episodes):
         t+=1
 
 
-    if (replay_buffer.size() > batch_size):
-        # FOR EVERY EPISODE - TRAIN # is this true
-        # Sample mini-batch of transitions from buffer
-        (
-            batch_state,
-            batch_action,
-            batch_reward,
-            batch_done,
-            batch_next_state,
-        ) = replay_buffer.sample_batch(batch_size)
+    # if (replay_buffer.size() > batch_size):
+    # FOR EVERY EPISODE - TRAIN # is this true
+    # Sample mini-batch of transitions from buffer
+    (
+        batch_state,
+        batch_action,
+        batch_reward,
+        batch_done,
+        batch_next_state,
+    ) = replay_buffer.sample_batch(batch_size)
 
-        batch_states = torch.Tensor(batch_state).to(device)
-        batch_actions = torch.Tensor(batch_action).to(device)
-        batch_rewards = torch.Tensor(batch_reward).to(device)
-        batch_dones = torch.Tensor(batch_done).to(device)
-        batch_next_states = torch.Tensor(batch_next_state).to(device)
-        
-        with torch.no_grad():
-            # Compute Target action
-            a_target = actor_target(batch_states)
-            Q1 = critic1_target(batch_states, a_target)
-            Q2 = critic2_target(batch_states, a_target)
-            Q = torch.min(Q1, Q2)
-
-            # Target Q
-            target_Q = batch_rewards + (1 - batch_dones) * gamma * Q
-        
-        av_Q = torch.mean(target_Q)
-        max_Q = torch.max(target_Q)
-
-        # Optimize Critic Networks
-        current_Q1 = critic1(batch_states, batch_actions)
-        critic1_loss = F.mse_loss(current_Q1, target_Q)
-        critic1_optimizer.zero_grad()
-        critic1_loss.backward()
-        critic1_optimizer.step()
+    batch_states = torch.Tensor(batch_state).to(device)
+    batch_actions = torch.Tensor(batch_action).to(device)
+    batch_rewards = torch.Tensor(batch_reward).to(device)
+    batch_dones = torch.Tensor(batch_done).to(device)
+    batch_next_states = torch.Tensor(batch_next_state).to(device)
     
-        current_Q2 = critic2(batch_states, batch_actions)
-        critic2_loss = F.mse_loss(current_Q2, target_Q)
-        critic2_optimizer.zero_grad()
-        critic2_loss.backward()
-        critic2_optimizer.step()
-         
-        # Update Actor Networks
-        if i_ep % parameter_update_delay == 0:
-            actor_loss = -critic1(batch_states, actor(batch_states)).mean()
-            actor_optimizer.zero_grad()
-            actor_loss.backward()
-            actor_optimizer.step()
-            
+    with torch.no_grad():
+        # Compute Target action
+        a_target = actor_target(batch_states)
+        Q1 = critic1_target(batch_states, a_target)
+        Q2 = critic2_target(batch_states, a_target)
+        Q = torch.min(Q1, Q2)
 
-        # Update the frozen target models - arbitrarily choose 100
-        if i_ep % 100 == 0:
-            actor_target.load_state_dict(actor.state_dict())
-            critic1_target.load_state_dict(critic1.state_dict())
-            critic2_target.load_state_dict(critic2.state_dict())
+        # Target Q
+        target_Q = batch_rewards + (1 - batch_dones) * gamma * Q
+    
+    av_Q = torch.mean(target_Q)
+    max_Q = torch.max(target_Q)
 
-        # Summary stats for training:
-        av_loss = critic1_loss + critic2_loss
-        writer.add_scalar("loss", av_loss, i_ep)
-        writer.add_scalar("Av. Q", av_Q, i_ep)
-        writer.add_scalar("Max. Q", max_Q, i_ep)
+    # Optimize Critic Networks
+    current_Q1 = critic1(batch_states, batch_actions)
+    critic1_loss = F.mse_loss(current_Q1, target_Q)
+    critic1_optimizer.zero_grad()
+    critic1_loss.backward()
+    critic1_optimizer.step()
+
+    current_Q2 = critic2(batch_states, batch_actions)
+    critic2_loss = F.mse_loss(current_Q2, target_Q)
+    critic2_optimizer.zero_grad()
+    critic2_loss.backward()
+    critic2_optimizer.step()
+        
+    # Update Actor Networks
+    if i_ep % parameter_update_delay == 0:
+        actor_loss = -critic1(batch_states, actor(batch_states)).mean()
+        actor_optimizer.zero_grad()
+        actor_loss.backward()
+        actor_optimizer.step()
+        
+
+    # Update the frozen target models - arbitrarily choose 100
+    if i_ep % 100 == 0:
+        actor_target.load_state_dict(actor.state_dict())
+        critic1_target.load_state_dict(critic1.state_dict())
+        critic2_target.load_state_dict(critic2.state_dict())
+
+    # Summary stats for training:
+    av_loss = critic1_loss + critic2_loss
+    writer.add_scalar("loss", av_loss, i_ep)
+    writer.add_scalar("Av. Q", av_Q, i_ep)
+    writer.add_scalar("Max. Q", max_Q, i_ep)
     
     if timesteps_since_eval >= eval_freq:
         # evaluate
