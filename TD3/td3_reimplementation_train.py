@@ -85,6 +85,9 @@ environment_dim = 20 # number of laser readings
 robot_dim = 4 # dimension of state  - In paper it makes it seem like robot dimension is 2, relative distance and heading to local waypoint!
 buffer_size = 1e6 # max size of buffer
 batch_size = 40 # Size of the mini-batch
+gamma = 1
+eval_freq = 5e3  # After how many steps to perform the evaluation
+eval_episodes = 10
 
 # notes to self
 # Gaussian noise added to sensor and action values
@@ -123,7 +126,9 @@ critic2_optimizer = torch.optim.Adam(critic2.parameters())
 Repeat 1-4 until either success criterion or max episodes has been reached.
 """
 t = 0
-updatec1 = True
+timesteps_since_eval = 0
+writer = SummaryWriter()
+epoch = 0
 for t in range(num_episodes):
     state = env.reset()
 
@@ -131,7 +136,7 @@ for t in range(num_episodes):
     t_episode = 0
     while (not done):
         # Within each episode
-        a = actor(state) # select action 
+        a = actor(state).cpu().data.numpy().flatten() # select action 
         en = np.random.normal(size=[1,2]) # exploration noise sigma assumed to be 1
 
         # Scaling according to eqn 5
@@ -147,8 +152,9 @@ for t in range(num_episodes):
         t_episode += 1
         t+=1
 
+
     if (replay_buffer.size > batch_size):
-        ## FOR EVERY EPISODE - TRAIN
+        # FOR EVERY EPISODE - TRAIN # is this true
         # Sample mini-batch of transitions from buffer
         (
             batch_states,
@@ -159,41 +165,82 @@ for t in range(num_episodes):
         ) = replay_buffer.sample_batch(batch_size)
         
         with torch.no_grad():
-            a_tilda = actor(batch_states)
-            Q1 = critic1_target(state, action)
-            Q2 = critic2_target(state, action)
+            # Compute Target action
+            a_target = actor_target(batch_states)
+            Q1 = critic1_target(batch_states, a_target)
+            Q2 = critic2_target(batch_states, a_target)
             Q = min(Q1, Q2)
-            target_Q = reward + (1 - done) * gamma * Q
 
-        # Update Actor Network
-        # Compute critic loss
-        current_Q1 = critic1(state, action)
-        current_Q2 = critic2(state, action)
-        critic1_loss = F.mse_loss(current_Q1, target_Q)
-        critic2_loss = F.mse_loss(current_Q2, target_Q)
-    
+            # Target Q
+            target_Q = batch_rewards + (1 - batch_dones) * gamma * Q
         
-        # Update Targets
-        if i_episode % parameter_update_delay:
-                # Optimize Critic Networks
-                if (updatec1):
-                    critic1_optimizer.zero_grad()
-                    critic1_loss.backward()
-                    critic1_optimizer.step()
-                else:
-                    critic2_optimizer.zero_grad()
-                    critic2_loss.backward()
-                    critic2_optimizer.step()
-                
-                updatec1 = not updatec1 # switch which critic network gets updated
+        av_Q = torch.mean(target_Q)
+        max_Q = torch.max(target_Q)
 
-        # Optimize the actor 
-        actor_optimizer.zero_grad()
-        actor_loss.backward()
-        sactor_optimizer.step()
+        # Optimize Critic Networks
+        current_Q1 = critic1(batch_states, batch_actions)
+        critic1_loss = F.mse_loss(current_Q1, target_Q)
+        critic1_optimizer.zero_grad()
+        critic1_loss.backward()
+        critic1_optimizer.step()
+    
+        current_Q2 = critic2(batch_states, batch_actions)
+        critic2_loss = F.mse_loss(current_Q2, target_Q)
+        critic2_optimizer.zero_grad()
+        critic2_loss.backward()
+        critic2_optimizer.step()
+         
+        # Update Actor Networks
+        if i_episode % parameter_update_delay == 0:
+            actor_loss = -critic1(batch_states, actor(batch_states)).mean()
+            actor_optimizer.zero_grad()
+            actor_loss.backward()
+            actor_optimizer.step()
+            
 
-        # Update the frozen target models
-        if i_episode % 100
+        # Update the frozen target models - arbitrarily choose 100
+        if i_episode % 100 == 0:
             actor_target.load_state_dict(actor.state_dict())
             critic1_target.load_state_dict(critic1.state_dict())
             critic2_target.load_state_dict(critic2.state_dict())
+
+        # Summary stats for training:
+        av_loss = critic1_loss + critic2_loss
+        writer.add_scalar("loss", av_loss, i_episode)
+        writer.add_scalar("Av. Q", av_Q, i_episode)
+        writer.add_scalar("Max. Q", max_Q, i_episode)
+    
+    if timesteps_since_eval >= eval_freq:
+        # evaluate
+        timesteps_since_eval %= eval_freq
+        avg_reward = 0.0
+        col = 0
+        for _ in range(eval_episodes):
+            count = 0
+            state = env.reset()
+            done = False
+            while not done and count <= max_steps:
+                action = actor(np.array(state)).cpu().data.numpy().flatten()
+                a_in = [(action[0] + 1) / 2, action[1]]
+                state, reward, done, _ = env.step(a_in)
+                avg_reward += reward
+                count += 1
+                if reward < -90:
+                    col += 1
+        avg_reward /= eval_episodes
+        avg_col = col / eval_episodes
+        print("..............................................")
+        print(
+            "Average Reward over %i Evaluation Episodes, Epoch %i: %f, %f"
+            % (eval_episodes, epoch, avg_reward, avg_col)
+        )
+        print("..............................................")
+        epoch +=1
+        network.save(file_name, directory="./pytorch_models")
+    
+    # end of episode, reset state
+    state = env.reset()
+    timesteps_since_eval += 1
+
+network.save("%s" % file_name, directory="./models")
+np.save("./results/%s" % file_name, evaluations)
