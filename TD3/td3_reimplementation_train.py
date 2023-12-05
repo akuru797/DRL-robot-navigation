@@ -60,9 +60,10 @@ class Critic(nn.Module):
 
         return Q1
 
-def save(actor_state_dict, critic_state_dict, filename, directory):
+def save(actor_state_dict, critic1_state_dict, critic2_state_dict, filename, directory):
     torch.save(self.actor.state_dict(), "%s/%s_actor.pth" % (directory, filename))
-    torch.save(self.critic.state_dict(), "%s/%s_critic.pth" % (directory, filename))
+    torch.save(self.critic1.state_dict(), "%s/%s_critic1.pth" % (directory, filename))
+    torch.save(self.critic2.state_dict(), "%s/%s_critic2.pth" % (directory, filename))
 
 ## RUNTIME PARAMETERS
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -240,7 +241,7 @@ for t in range(num_episodes):
         )
         print("..............................................")
         epoch +=1
-        save(actor.state_dict(), critic.state_dict(), file_name, directory="./pytorch_models")
+        save(actor.state_dict(), critic1.state_dict(), critic2.state_dict(), file_name, directory="./pytorch_models")
     
     # end of episode, reset state
     state = env.reset()
