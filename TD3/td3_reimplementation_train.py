@@ -72,7 +72,7 @@ file_name = "TD3_velodyne"
 # Parameters for training = according to paper
 num_episodes = 800 # number of episodes to use for training
 max_steps = 500
-v_max = 0.5 #m/s
+v_max = 1 #0.5 #m/s
 w_max = 1 #rad/s
 
 n_delayed_reward = 10 #steps
@@ -148,15 +148,16 @@ for i_ep in range(num_episodes):
         # Within each episode
         state_tensor = torch.Tensor(state.reshape(1,-1)).to(device)
         a = actor(state_tensor).cpu().data.numpy().flatten() # select action 
-        en = np.random.normal(size=[1,2]) # exploration noise sigma assumed to be 1
+        en = np.random.normal(size=[2]) # exploration noise sigma assumed to be 1
 
+        a += en
         # Scaling according to eqn 5
         v = v_max * (a[0] + 1)/2
         w = w_max * a[1]
 
         action = [v,w]
         next_state, reward, done, target = env.step(action)
-
+                
         # Store transition in replay buffer
         replay_buffer.add(state, action, reward, done, next_state)
         state = next_state
