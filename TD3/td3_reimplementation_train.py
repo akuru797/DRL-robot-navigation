@@ -104,9 +104,12 @@ critic1 = Critic(state_size, action_size).to(device)
 critic2 = Critic(state_size, action_size).to(device)
 
 # Target Networks
-actor_target = Actor.load_state_dict(actor.state_dict())
-critic1_target = Critic.load_state_dict(critic1.state_dict())
-critic2_target = Critic.load_state_dict(critic2.state_dict())
+actor_target = Actor(state_size, action_size).to(device)
+actor_target.load_state_dict(actor.state_dict())
+critic1_target = Critic(state_size, action_size).to(device)
+critic2_target = Critic(state_size, action_size).to(device)
+critic1_target.load_state_dict(critic1.state_dict())
+critic2_target.load_state_dict(critic2.state_dict())
 
 
 env = GazeboEnv("multi_robot_scenario.launch", environment_dim)
