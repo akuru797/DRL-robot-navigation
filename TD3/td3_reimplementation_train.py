@@ -60,9 +60,13 @@ class Critic(nn.Module):
 
         return Q1
 
-          
+def save(actor_state_dict, critic_state_dict, filename, directory):
+    torch.save(self.actor.state_dict(), "%s/%s_actor.pth" % (directory, filename))
+    torch.save(self.critic.state_dict(), "%s/%s_critic.pth" % (directory, filename))
+
 ## RUNTIME PARAMETERS
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+file_name = "TD3_velodyne"
 
 # Parameters for training = according to paper
 num_episodes = 800 # number of episodes to use for training
@@ -236,11 +240,10 @@ for t in range(num_episodes):
         )
         print("..............................................")
         epoch +=1
-        network.save(file_name, directory="./pytorch_models")
+        save(actor.state_dict(), critic.state_dict(), file_name, directory="./pytorch_models")
     
     # end of episode, reset state
     state = env.reset()
     timesteps_since_eval += 1
 
-network.save("%s" % file_name, directory="./models")
-np.save("./results/%s" % file_name, evaluations)
+save(actor.state_dict(), critic.state_dict(), file_name, directory="./models")
