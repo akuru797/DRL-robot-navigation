@@ -51,10 +51,10 @@ class Critic(nn.Module):
         # s = state
         # a = action
         Ls = F.relu(self.layer1a(s))
-        a2 = self.layer2a(Ls)
-        b2 = self.layer2b(a)
-        out_s = torch.mm(Ls, a2.weight.data.t())
-        out_a = torch.mm(a, b2.weight.data.t())
+        self.layer2a(Ls)
+        self.layer2b(a)
+        out_s = torch.mm(Ls, self.layer2a.weight.data.t())
+        out_a = torch.mm(a, self.layer2b.weight.data.t())
         out = self.layer3(out_s + out_a + self.layer2a.bias.data)
         Q1 = self.layer4(out)
 
@@ -144,7 +144,7 @@ for i_ep in range(num_episodes):
 
     done = False
     t_episode = 0
-    while (not done):
+    while (not done and t_episode <= max_steps):
         # Within each episode
         state_tensor = torch.Tensor(state.reshape(1,-1)).to(device)
         a = actor(state_tensor).cpu().data.numpy().flatten() # select action 
@@ -186,7 +186,7 @@ for i_ep in range(num_episodes):
             a_target = actor_target(batch_states)
             Q1 = critic1_target(batch_states, a_target)
             Q2 = critic2_target(batch_states, a_target)
-            Q = min(Q1, Q2)
+            Q = torch.min(Q1, Q2)
 
             # Target Q
             target_Q = batch_rewards + (1 - batch_dones) * gamma * Q
@@ -208,7 +208,7 @@ for i_ep in range(num_episodes):
         critic2_optimizer.step()
          
         # Update Actor Networks
-        if i_episode % parameter_update_delay == 0:
+        if i_ep % parameter_update_delay == 0:
             actor_loss = -critic1(batch_states, actor(batch_states)).mean()
             actor_optimizer.zero_grad()
             actor_loss.backward()
@@ -216,16 +216,16 @@ for i_ep in range(num_episodes):
             
 
         # Update the frozen target models - arbitrarily choose 100
-        if i_episode % 100 == 0:
+        if i_ep % 100 == 0:
             actor_target.load_state_dict(actor.state_dict())
             critic1_target.load_state_dict(critic1.state_dict())
             critic2_target.load_state_dict(critic2.state_dict())
 
         # Summary stats for training:
         av_loss = critic1_loss + critic2_loss
-        writer.add_scalar("loss", av_loss, i_episode)
-        writer.add_scalar("Av. Q", av_Q, i_episode)
-        writer.add_scalar("Max. Q", max_Q, i_episode)
+        writer.add_scalar("loss", av_loss, i_ep)
+        writer.add_scalar("Av. Q", av_Q, i_ep)
+        writer.add_scalar("Max. Q", max_Q, i_ep)
     
     if timesteps_since_eval >= eval_freq:
         # evaluate
