@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from replay_buffer import ReplayBuffer
 from velodyne_env import GazeboEnv
+import os
+import time
 
 class Actor(nn.Module):
     def __init__(self, state_size, action_size):
@@ -48,22 +50,20 @@ class Critic(nn.Module):
     def forward(self, s, a):
         # s = state
         # a = action
-        s = self.flatten(s)
-        a = self.flatten(a)
         Ls = F.relu(self.layer1a(s))
-        F.layer2a(out)
-        F.layer2b(a)
-        out_s = torch.mm(Ls, self.layer2a.weight.data.t())
-        out_a = torch.mm(a, self.layer2a.weight.data.t())
+        a2 = self.layer2a(Ls)
+        b2 = self.layer2b(a)
+        out_s = torch.mm(Ls, a2.weight.data.t())
+        out_a = torch.mm(a, b2.weight.data.t())
         out = self.layer3(out_s + out_a + self.layer2a.bias.data)
         Q1 = self.layer4(out)
 
         return Q1
 
 def save(actor_state_dict, critic1_state_dict, critic2_state_dict, filename, directory):
-    torch.save(self.actor.state_dict(), "%s/%s_actor.pth" % (directory, filename))
-    torch.save(self.critic1.state_dict(), "%s/%s_critic1.pth" % (directory, filename))
-    torch.save(self.critic2.state_dict(), "%s/%s_critic2.pth" % (directory, filename))
+    torch.save(actor_state_dict, "%s/%s_actor.pth" % (directory, filename))
+    torch.save(critic1_state_dict, "%s/%s_critic1.pth" % (directory, filename))
+    torch.save(critic2_state_dict, "%s/%s_critic2.pth" % (directory, filename))
 
 ## RUNTIME PARAMETERS
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -98,7 +98,11 @@ eval_episodes = 10
 # Critic: Estimated value function, evaluates actions taken by actor based on given policy
 # Set seed for experiment reproducibility
 
-num_episodes = 0
+if not os.path.exists("./pytorch_models"):
+    os.makedirs("./pytorch_models")
+
+
+num_episodes = 800
 state_size = robot_dim + environment_dim
 # Create a replay buffer
 replay_buffer = ReplayBuffer(buffer_size, seed)
@@ -134,19 +138,21 @@ t = 0
 timesteps_since_eval = 0
 writer = SummaryWriter()
 epoch = 0
-for t in range(num_episodes):
+time.sleep(15) # environment setup
+for i_ep in range(num_episodes):
     state = env.reset()
 
     done = False
     t_episode = 0
     while (not done):
         # Within each episode
-        a = actor(state).cpu().data.numpy().flatten() # select action 
+        state_tensor = torch.Tensor(state.reshape(1,-1)).to(device)
+        a = actor(state_tensor).cpu().data.numpy().flatten() # select action 
         en = np.random.normal(size=[1,2]) # exploration noise sigma assumed to be 1
 
         # Scaling according to eqn 5
-        v = v_max * (a(0) + 1)/2
-        w = w_max * a(1)
+        v = v_max * (a[0] + 1)/2
+        w = w_max * a[1]
 
         action = [v,w]
         next_state, reward, done, target = env.step(action)
@@ -158,16 +164,22 @@ for t in range(num_episodes):
         t+=1
 
 
-    if (replay_buffer.size > batch_size):
+    if (replay_buffer.size() > batch_size):
         # FOR EVERY EPISODE - TRAIN # is this true
         # Sample mini-batch of transitions from buffer
         (
-            batch_states,
-            batch_actions,
-            batch_rewards,
-            batch_dones,
-            batch_next_states,
+            batch_state,
+            batch_action,
+            batch_reward,
+            batch_done,
+            batch_next_state,
         ) = replay_buffer.sample_batch(batch_size)
+
+        batch_states = torch.Tensor(batch_state).to(device)
+        batch_actions = torch.Tensor(batch_action).to(device)
+        batch_rewards = torch.Tensor(batch_reward).to(device)
+        batch_dones = torch.Tensor(batch_done).to(device)
+        batch_next_states = torch.Tensor(batch_next_state).to(device)
         
         with torch.no_grad():
             # Compute Target action
@@ -246,5 +258,7 @@ for t in range(num_episodes):
     # end of episode, reset state
     state = env.reset()
     timesteps_since_eval += 1
+    print("episodes:")
+    print(i_ep)
 
-save(actor.state_dict(), critic.state_dict(), file_name, directory="./models")
+#save(actor.state_dict(), critic1.state_dict(), critic2.state_dict(), file_name, directory="./models")
