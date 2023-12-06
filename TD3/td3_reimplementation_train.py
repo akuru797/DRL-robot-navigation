@@ -138,9 +138,10 @@ t = 0
 timesteps_since_eval = 0
 writer = SummaryWriter()
 epoch = 0
-time.sleep(15) # environment setup
+time.sleep(25) # environment setup
 state = env.reset()
 t_episode = 0
+num_param_updates = 0
 episodes_since_update = 0
 for t in range(max_time):
     state_tensor = torch.Tensor(state.reshape(1,-1)).to(device)
@@ -176,14 +177,12 @@ for t in range(max_time):
     
     with torch.no_grad():
         # Compute Target action
-        a_target = actor_target(batch_states) # clipped noise?
-        en = np.random.normal(size=[2]) # exploration noise sigma assumed to be 1
+        a_target = actor_target(batch_states)
+        en = torch.Tensor(batch_actions).data.normal_(0,1)
         a_target += en
-        action_target = [v,w]
-        # Scaling according to eqn 5
-        v = v_max * (a_target[0] + 1)/2
-        w = w_max * a_target[1]
-
+        action_target = a_target.clamp(-v_max, v_max)
+        
+        action_target = torch.Tensor(action_target)
         Q1 = critic1_target(batch_states, action_target)
         Q2 = critic2_target(batch_states, action_target)
         Q = torch.min(Q1, Q2)
@@ -228,13 +227,14 @@ for t in range(max_time):
         for param, target_param in zip(actor.parameters(), actor_target.parameters()):
             target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
-        episodes_since_update = 0              
+        episodes_since_update = 0
+        num_param_updates += 1
 
-    # Summary stats for training:
-    av_loss = critic1_loss + critic2_loss
-    writer.add_scalar("loss", av_loss, t)
-    writer.add_scalar("Av. Q", av_Q, t)
-    writer.add_scalar("Max. Q", max_Q, t)
+        # Summary stats for training:
+        av_loss = critic1_loss + critic2_loss
+        writer.add_scalar("loss", av_loss, num_param_updates)
+        writer.add_scalar("Av. Q", av_Q, num_param_updates)
+        writer.add_scalar("Max. Q", max_Q, num_param_updates)
     
     if timesteps_since_eval >= eval_freq:
         # evaluate
@@ -274,7 +274,5 @@ for t in range(max_time):
         state = next_state
     
     timesteps_since_eval += 1
-    print("episodes:")
-    print(t)
 
-#save(actor.state_dict(), critic1.state_dict(), critic2.state_dict(), file_name, directory="./models")
+save(actor.state_dict(), critic1.state_dict(), critic2.state_dict(), file_name, directory="./models")
