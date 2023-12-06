@@ -76,7 +76,7 @@ v_max = 0.5 #m/s
 w_max = 1 #rad/s
 
 n_delayed_reward = 10 #steps
-parameter_update_delay = 2 #episodes
+parameter_update_delay = 2 # episodes
 
 min_dist_threshold = 1 # meter, distance to goal where we return success
 action_size = 2
@@ -90,6 +90,7 @@ batch_size = 40 # Size of the mini-batch
 gamma = 1
 eval_freq = 5e3  # After how many steps to perform the evaluation
 eval_episodes = 10
+tau=0.005
 
 # notes to self
 # Gaussian noise added to sensor and action values
@@ -102,7 +103,7 @@ if not os.path.exists("./pytorch_models"):
     os.makedirs("./pytorch_models")
 
 
-num_episodes = 800
+max_time = num_episodes*max_steps
 state_size = robot_dim + environment_dim
 # Create a replay buffer
 replay_buffer = ReplayBuffer(buffer_size, seed)
@@ -119,7 +120,6 @@ critic1_target = Critic(state_size, action_size).to(device)
 critic2_target = Critic(state_size, action_size).to(device)
 critic1_target.load_state_dict(critic1.state_dict())
 critic2_target.load_state_dict(critic2.state_dict())
-
 
 env = GazeboEnv("multi_robot_scenario.launch", environment_dim)
 
@@ -139,33 +139,26 @@ timesteps_since_eval = 0
 writer = SummaryWriter()
 epoch = 0
 time.sleep(15) # environment setup
-for i_ep in range(num_episodes):
-    state = env.reset()
+state = env.reset()
+t_episode = 0
+episodes_since_update = 0
+for t in range(max_time):
+    state_tensor = torch.Tensor(state.reshape(1,-1)).to(device)
+    a = actor(state_tensor).cpu().data.numpy().flatten() # select action 
+    en = np.random.normal(size=[2]) # exploration noise sigma assumed to be 1
+    a += en
 
-    done = False
-    t_episode = 0
-    while (not done and t_episode <= max_steps):
-        # Within each episode
-        state_tensor = torch.Tensor(state.reshape(1,-1)).to(device)
-        a = actor(state_tensor).cpu().data.numpy().flatten() # select action 
-        en = np.random.normal(size=[1,2]) # exploration noise sigma assumed to be 1
+    # Scaling according to eqn 5
+    v = v_max * (a[0] + 1)/2
+    w = w_max * a[1]
 
-        # Scaling according to eqn 5
-        v = v_max * (a[0] + 1)/2
-        w = w_max * a[1]
+    action = [v,w]
+    next_state, reward, done, target = env.step(action)
 
-        action = [v,w]
-        next_state, reward, done, target = env.step(action)
-
-        # Store transition in replay buffer
-        replay_buffer.add(state, action, reward, done, next_state)
-        state = next_state
-        t_episode += 1
-        t+=1
-
-
-    # if (replay_buffer.size() > batch_size):
-    # FOR EVERY EPISODE - TRAIN # is this true
+    # Store transition in replay buffer
+    replay_buffer.add(state, action, reward, done, next_state)
+    
+    # Update Q functions
     # Sample mini-batch of transitions from buffer
     (
         batch_state,
@@ -183,9 +176,16 @@ for i_ep in range(num_episodes):
     
     with torch.no_grad():
         # Compute Target action
-        a_target = actor_target(batch_states)
-        Q1 = critic1_target(batch_states, a_target)
-        Q2 = critic2_target(batch_states, a_target)
+        a_target = actor_target(batch_states) # clipped noise?
+        en = np.random.normal(size=[2]) # exploration noise sigma assumed to be 1
+        a_target += en
+        action_target = [v,w]
+        # Scaling according to eqn 5
+        v = v_max * (a_target[0] + 1)/2
+        w = w_max * a_target[1]
+
+        Q1 = critic1_target(batch_states, action_target)
+        Q2 = critic2_target(batch_states, action_target)
         Q = torch.min(Q1, Q2)
 
         # Target Q
@@ -208,24 +208,33 @@ for i_ep in range(num_episodes):
     critic2_optimizer.step()
         
     # Update Actor Networks
-    if i_ep % parameter_update_delay == 0:
+    if episodes_since_update >= parameter_update_delay:
         actor_loss = -critic1(batch_states, actor(batch_states)).mean()
         actor_optimizer.zero_grad()
         actor_loss.backward()
         actor_optimizer.step()
-        
 
-    # Update the frozen target models - arbitrarily choose 100
-    if i_ep % 100 == 0:
+        # Target network updates
         actor_target.load_state_dict(actor.state_dict())
         critic1_target.load_state_dict(critic1.state_dict())
         critic2_target.load_state_dict(critic2.state_dict())
 
+        for param, target_param in zip(critic1.parameters(), critic1_target.parameters()):
+            target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
+
+        for param, target_param in zip(critic2.parameters(), critic2_target.parameters()):
+            target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
+
+        for param, target_param in zip(actor.parameters(), actor_target.parameters()):
+            target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
+
+        episodes_since_update = 0              
+
     # Summary stats for training:
     av_loss = critic1_loss + critic2_loss
-    writer.add_scalar("loss", av_loss, i_ep)
-    writer.add_scalar("Av. Q", av_Q, i_ep)
-    writer.add_scalar("Max. Q", max_Q, i_ep)
+    writer.add_scalar("loss", av_loss, t)
+    writer.add_scalar("Av. Q", av_Q, t)
+    writer.add_scalar("Max. Q", max_Q, t)
     
     if timesteps_since_eval >= eval_freq:
         # evaluate
@@ -255,10 +264,17 @@ for i_ep in range(num_episodes):
         epoch +=1
         save(actor.state_dict(), critic1.state_dict(), critic2.state_dict(), file_name, directory="./pytorch_models")
     
-    # end of episode, reset state
-    state = env.reset()
+    # End of episode, reset state
+    if (done or t_episode >= max_steps):
+        state = env.reset()
+        t_episode = 0
+        episodes_since_update += 1
+    else:
+        t_episode += 1
+        state = next_state
+    
     timesteps_since_eval += 1
     print("episodes:")
-    print(i_ep)
+    print(t)
 
 #save(actor.state_dict(), critic1.state_dict(), critic2.state_dict(), file_name, directory="./models")
