@@ -246,7 +246,8 @@ for t in range(max_time):
             state = env.reset()
             done = False
             while not done and count <= max_steps:
-                action = actor(np.array(state)).cpu().data.numpy().flatten()
+                state_tensor = torch.Tensor(state.reshape(1,-1)).to(device)
+                action = actor(state_tensor).cpu().data.numpy().flatten()
                 a_in = [(action[0] + 1) / 2, action[1]]
                 state, reward, done, _ = env.step(a_in)
                 avg_reward += reward
