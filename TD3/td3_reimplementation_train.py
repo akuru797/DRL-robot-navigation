@@ -72,7 +72,7 @@ file_name = "TD3_velodyne"
 # Parameters for training = according to paper
 num_episodes = 800 # number of episodes to use for training
 max_steps = 500
-v_max = 0.5 #m/s
+v_max = 1 #0.5 #m/s
 w_max = 1 #rad/s
 
 n_delayed_reward = 10 #steps
