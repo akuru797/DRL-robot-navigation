@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import matplotlib as plt
 from velodyne_env import GazeboEnv
 
 
@@ -71,7 +71,12 @@ episode_timesteps = 0
 state = env.reset()
 
 # Begin the testing loop
-while True:
+num_eval_episodes = 20
+i_episode = 0
+episode_length = np.zeros(num_eval_episodes)
+rewards = np.zeros(num_eval_episodes)
+cumulative_reward = 0
+while i_episode < num_eval_episodes:
     action = network.get_action(np.array(state))
 
     # Update action to fall in range [0,1] for linear velocity and [-1,1] for angular velocity
@@ -83,7 +88,26 @@ while True:
     if done:
         state = env.reset()
         done = False
+        episode_length[i_episode] = episode_timesteps
         episode_timesteps = 0
+        cumulative_reward = 0
+        i_episode += 1
     else:
         state = next_state
         episode_timesteps += 1
+        cumulative_reward += reward
+
+# Plots
+# Cumulative Rewards
+fig = plt.figure(figsize=(10,5))
+plt.hist(rewards, bins='auto')
+titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episodes"
+plt.title(titlestr, bins='auto')
+plt.show()
+
+# Episode Length
+fig = plt.figure(figsize=(10,5))
+plt.hist(episode_length)
+titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episodes"
+plt.title(titlestr)
+plt.show()
