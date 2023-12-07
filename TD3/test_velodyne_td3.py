@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import matplotlib as plt
+import matplotlib.pyplot as plt
 from velodyne_env import GazeboEnv
 
 
@@ -38,7 +38,7 @@ class TD3(object):
     def load(self, filename, directory):
         # Function to load network parameters
         self.actor.load_state_dict(
-            torch.load("%s/%s_actor.pth" % (directory, filename))
+            torch.load("%s/%s_actor.pth" % (directory, filename), map_location=torch.device('cpu'))
         )
 
 
@@ -53,7 +53,7 @@ file_name = "TD3_velodyne"  # name of the file to load the policy from
 environment_dim = 20
 robot_dim = 4
 env = GazeboEnv("multi_robot_scenario.launch", environment_dim)
-time.sleep(5)
+time.sleep(15)
 torch.manual_seed(seed)
 np.random.seed(seed)
 state_dim = environment_dim + robot_dim
@@ -71,7 +71,7 @@ episode_timesteps = 0
 state = env.reset()
 
 # Begin the testing loop
-num_eval_episodes = 20
+num_eval_episodes = 5
 i_episode = 0
 episode_length = np.zeros(num_eval_episodes)
 rewards = np.zeros(num_eval_episodes)
@@ -91,6 +91,8 @@ while i_episode < num_eval_episodes:
         episode_length[i_episode] = episode_timesteps
         episode_timesteps = 0
         cumulative_reward = 0
+        notestr = "Episode #" + str(i_episode) + " completed."
+        print(notestr)
         i_episode += 1
     else:
         state = next_state
@@ -100,14 +102,16 @@ while i_episode < num_eval_episodes:
 # Plots
 # Cumulative Rewards
 fig = plt.figure(figsize=(10,5))
-plt.hist(rewards, bins='auto')
-titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episodes"
-plt.title(titlestr, bins='auto')
-plt.show()
+num_bins = num_eval_episodes/2
+plt.hist(rewards, bins=num_bins)
+titlestr = "Rewards over " + str(num_eval_episodes) + " evaluation episodes"
+plt.title(titlestr)
+plt.savefig("Rewards.png")
 
 # Episode Length
 fig = plt.figure(figsize=(10,5))
-plt.hist(episode_length)
+plt.hist(episode_length, bins=num_bins)
 titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episodes"
 plt.title(titlestr)
+plt.savefig("Episode_Length.png")
 plt.show()
