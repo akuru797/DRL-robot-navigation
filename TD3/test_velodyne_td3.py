@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import matplotlib as plt
+from matplotlib import pyplot as plt
 from velodyne_env import GazeboEnv
 
 
