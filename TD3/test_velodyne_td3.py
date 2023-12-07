@@ -38,7 +38,10 @@ class TD3(object):
     def load(self, filename, directory):
         # Function to load network parameters
         self.actor.load_state_dict(
-            torch.load("%s/%s_actor.pth" % (directory, filename), map_location=torch.device('cpu'))
+            torch.load(
+                "%s/%s_actor.pth" % (directory, filename),
+                map_location=torch.device("cpu"),
+            )
         )
 
 
@@ -83,7 +86,7 @@ while i_episode < num_eval_episodes:
     a_in = [(action[0] + 1) / 2, action[1]]
     next_state, reward, done, target = env.step(a_in)
     done = 1 if episode_timesteps + 1 == max_ep else int(done)
-    
+
     cumulative_reward += reward
     # On termination of episode
     if done:
@@ -102,14 +105,14 @@ while i_episode < num_eval_episodes:
 
 # Plots
 # Cumulative Rewards
-fig = plt.figure(figsize=(10,5))
-plt.hist(rewards, bins='auto', rwidth=0.9)
+fig = plt.figure(figsize=(10, 5))
+plt.hist(rewards, bins="auto", rwidth=0.9)
 titlestr = "Rewards over " + str(num_eval_episodes) + " evaluation episodes"
 plt.title(titlestr)
 plt.savefig("Rewards.png")
 
 # Episode Length
-fig = plt.figure(figsize=(10,5))
+fig = plt.figure(figsize=(10, 5))
 plt.hist(episode_length, bins=50, rwidth=0.9)
 titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episodes"
 plt.title(titlestr)
