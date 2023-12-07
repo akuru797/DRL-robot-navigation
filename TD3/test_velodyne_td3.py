@@ -53,7 +53,7 @@ file_name = "TD3_velodyne"  # name of the file to load the policy from
 environment_dim = 20
 robot_dim = 4
 env = GazeboEnv("multi_robot_scenario.launch", environment_dim)
-time.sleep(15)
+time.sleep(25)
 torch.manual_seed(seed)
 np.random.seed(seed)
 state_dim = environment_dim + robot_dim
@@ -71,7 +71,7 @@ episode_timesteps = 0
 state = env.reset()
 
 # Begin the testing loop
-num_eval_episodes = 5
+num_eval_episodes = 20
 i_episode = 0
 episode_length = np.zeros(num_eval_episodes)
 rewards = np.zeros(num_eval_episodes)
@@ -83,12 +83,14 @@ while i_episode < num_eval_episodes:
     a_in = [(action[0] + 1) / 2, action[1]]
     next_state, reward, done, target = env.step(a_in)
     done = 1 if episode_timesteps + 1 == max_ep else int(done)
-
+    
+    cumulative_reward += reward
     # On termination of episode
     if done:
         state = env.reset()
         done = False
         episode_length[i_episode] = episode_timesteps
+        rewards[i_episode] = cumulative_reward
         episode_timesteps = 0
         cumulative_reward = 0
         notestr = "Episode #" + str(i_episode) + " completed."
@@ -97,20 +99,18 @@ while i_episode < num_eval_episodes:
     else:
         state = next_state
         episode_timesteps += 1
-        cumulative_reward += reward
 
 # Plots
 # Cumulative Rewards
 fig = plt.figure(figsize=(10,5))
-num_bins = num_eval_episodes/2
-plt.hist(rewards, bins=num_bins)
+plt.hist(rewards, bins='auto', rwidth=0.9)
 titlestr = "Rewards over " + str(num_eval_episodes) + " evaluation episodes"
 plt.title(titlestr)
 plt.savefig("Rewards.png")
 
 # Episode Length
 fig = plt.figure(figsize=(10,5))
-plt.hist(episode_length, bins=num_bins)
+plt.hist(episode_length, bins=50, rwidth=0.9)
 titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episodes"
 plt.title(titlestr)
 plt.savefig("Episode_Length.png")
