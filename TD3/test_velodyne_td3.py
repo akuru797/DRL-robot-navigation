@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 from velodyne_env import GazeboEnv
 
 
@@ -38,7 +38,7 @@ class TD3(object):
     def load(self, filename, directory):
         # Function to load network parameters
         self.actor.load_state_dict(
-            torch.load("%s/%s_actor.pth" % (directory, filename))
+            torch.load("%s/%s_actor.pth" % (directory, filename), map_location=torch.device('cpu'))
         )
 
 
@@ -53,7 +53,7 @@ file_name = "TD3_velodyne"  # name of the file to load the policy from
 environment_dim = 20
 robot_dim = 4
 env = GazeboEnv("multi_robot_scenario.launch", environment_dim)
-time.sleep(5)
+time.sleep(25)
 torch.manual_seed(seed)
 np.random.seed(seed)
 state_dim = environment_dim + robot_dim
@@ -83,31 +83,35 @@ while i_episode < num_eval_episodes:
     a_in = [(action[0] + 1) / 2, action[1]]
     next_state, reward, done, target = env.step(a_in)
     done = 1 if episode_timesteps + 1 == max_ep else int(done)
-
+    
+    cumulative_reward += reward
     # On termination of episode
     if done:
         state = env.reset()
         done = False
         episode_length[i_episode] = episode_timesteps
+        rewards[i_episode] = cumulative_reward
         episode_timesteps = 0
         cumulative_reward = 0
+        notestr = "Episode #" + str(i_episode) + " completed."
+        print(notestr)
         i_episode += 1
     else:
         state = next_state
         episode_timesteps += 1
-        cumulative_reward += reward
 
 # Plots
 # Cumulative Rewards
 fig = plt.figure(figsize=(10,5))
-plt.hist(rewards, bins='auto')
-titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episodes"
-plt.title(titlestr, bins='auto')
-plt.show()
+plt.hist(rewards, bins='auto', rwidth=0.9)
+titlestr = "Rewards over " + str(num_eval_episodes) + " evaluation episodes"
+plt.title(titlestr)
+plt.savefig("Rewards.png")
 
 # Episode Length
 fig = plt.figure(figsize=(10,5))
-plt.hist(episode_length)
+plt.hist(episode_length, bins=50, rwidth=0.9)
 titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episodes"
 plt.title(titlestr)
+plt.savefig("Episode_Length.png")
 plt.show()
