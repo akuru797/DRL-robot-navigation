@@ -1,6 +1,6 @@
 import os
 import time
-
+import copy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -82,15 +82,17 @@ class DDPG(object):
     def __init__(self, state_dim, action_dim, max_action):
         # Initialize the Actor network
         self.actor = Actor(state_dim, action_dim).to(device)
-        self.actor_target = Actor(state_dim, action_dim).to(device)
+        # self.actor_target = Actor(state_dim, action_dim).to(device)
+        self.actor_target = copy.deepcopy(self.actor)
         self.actor_target.load_state_dict(self.actor.state_dict())
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters())
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
 
         # Initialize the Critic networks
         self.critic = Critic(state_dim, action_dim).to(device)
-        self.critic_target = Critic(state_dim, action_dim).to(device)
+        # self.critic_target = Critic(state_dim, action_dim).to(device)
+        self.critic_target = copy.deepcopy(self.critic)
         self.critic_target.load_state_dict(self.critic.state_dict())
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters())
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
 
         self.max_action = max_action
         self.writer = SummaryWriter()
@@ -152,33 +154,34 @@ class DDPG(object):
             current_Q = self.critic(state, action)
 
             # Calculate the loss between the current Q value and the target Q value
-            loss = F.mse_loss(current_Q, target_Q)
+            critic_loss = F.mse_loss(current_Q, target_Q)
 
             # Perform the gradient descent
             self.critic_optimizer.zero_grad()
-            loss.backward()
+            critic_loss.backward()
             self.critic_optimizer.step()
 
             # Maximize the actor output value by performing gradient descent on negative Q values
             # (essentially perform gradient ascent)
             actor_grad = self.critic(state, self.actor(state))
-            actor_grad = -actor_grad.mean()
+            actor_loss = -actor_grad.mean()
             self.actor_optimizer.zero_grad()
-            actor_grad.backward()
+            actor_loss.backward()
             self.actor_optimizer.step()
+
+            # Use soft update to update the critic-target network parameters by infusing
+            # small amount of current parameters
+            for param, target_param in zip(
+                self.critic.parameters(), self.critic_target.parameters()
+            ):
+                target_param.data.copy_(
+                    tau * param.data + (1 - tau) * target_param.data
+                )
 
             # Use soft update to update the actor-target network parameters by
             # infusing small amount of current parameters
             for param, target_param in zip(
                 self.actor.parameters(), self.actor_target.parameters()
-            ):
-                target_param.data.copy_(
-                    tau * param.data + (1 - tau) * target_param.data
-                )
-            # Use soft update to update the critic-target network parameters by infusing
-            # small amount of current parameters
-            for param, target_param in zip(
-                self.critic.parameters(), self.critic_target.parameters()
             ):
                 target_param.data.copy_(
                     tau * param.data + (1 - tau) * target_param.data
@@ -211,15 +214,15 @@ eval_freq = 5e3  # After how many steps to perform the evaluation
 max_ep = 500  # maximum number of steps per episode
 eval_ep = 10  # number of episodes for evaluation
 max_timesteps = 5e6  # Maximum number of steps to perform
-expl_noise = 1.5  # Initial exploration noise starting value in range [expl_min ... 1]
+expl_noise = 1.2  # Initial exploration noise starting value in range [expl_min ... 1]
 expl_decay_steps = (
-    500000  # Number of steps over which the initial exploration noise will decay over
+    450000  # Number of steps over which the initial exploration noise will decay over
 )
 expl_min = 0.3  # Exploration noise after the decay in range [0...expl_noise]
 batch_size = 40  # Size of the mini-batch
 gamma = 0.99999  # Discount factor to calculate the discounted future reward (should be close to 1)
 tau = 0.005  # Soft target update variable (should be close to 0)
-policy_noise = 0.4  # Added noise for exploration
+policy_noise = 0.3  # Added noise for exploration
 noise_clip = 0.5  # Maximum clamping values of the noise
 buffer_size = 1e6  # Maximum size of the buffer
 file_name = "DDPG_velodyne"  # name of the file to store the policy

@@ -79,6 +79,7 @@ i_episode = 0
 episode_length = np.zeros(num_eval_episodes)
 rewards = np.zeros(num_eval_episodes)
 cumulative_reward = 0
+collision_counter = 0
 while i_episode < num_eval_episodes:
     action = network.get_action(np.array(state))
 
@@ -86,6 +87,8 @@ while i_episode < num_eval_episodes:
     a_in = [(action[0] + 1) / 2, action[1]]
     next_state, reward, done, target = env.step(a_in)
     done = 1 if episode_timesteps + 1 == max_ep else int(done)
+    if reward == -100:
+        collision_counter += 1
 
     cumulative_reward += reward
     # On termination of episode
@@ -103,6 +106,8 @@ while i_episode < num_eval_episodes:
         state = next_state
         episode_timesteps += 1
 
+collision_percentage = (collision_counter / num_eval_episodes) * 100
+
 # Plots
 # Cumulative Rewards
 fig = plt.figure(figsize=(10, 5))
@@ -118,3 +123,5 @@ titlestr = "Episode Length over " + str(num_eval_episodes) + " evaluation episod
 plt.title(titlestr)
 plt.savefig("Episode_Length.png")
 plt.show()
+
+print("The collision percentage is: " + str(collision_percentage) + " %")

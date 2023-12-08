@@ -432,7 +432,7 @@ class GazeboEnv:
     @staticmethod
     def get_reward(target, collision, action, min_laser):
         if target:
-            return 100.0
+            return 200.0
         elif collision:
             return -100.0
         else:
