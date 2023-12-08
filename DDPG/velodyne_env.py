@@ -165,7 +165,7 @@ class GazeboEnv:
         rospy.wait_for_service("/gazebo/unpause_physics")
         try:
             self.unpause()
-        except (rospy.ServiceException) as e:
+        except rospy.ServiceException as e:
             print("/gazebo/unpause_physics service call failed")
 
         # propagate state for TIME_DELTA seconds
@@ -175,7 +175,7 @@ class GazeboEnv:
         try:
             pass
             self.pause()
-        except (rospy.ServiceException) as e:
+        except rospy.ServiceException as e:
             print("/gazebo/pause_physics service call failed")
 
         # read velodyne laser state
@@ -232,7 +232,6 @@ class GazeboEnv:
         return state, reward, done, target
 
     def reset(self):
-
         # Resets the state of the environment and returns an initial observation.
         rospy.wait_for_service("/gazebo/reset_world")
         try:
@@ -273,7 +272,7 @@ class GazeboEnv:
         rospy.wait_for_service("/gazebo/unpause_physics")
         try:
             self.unpause()
-        except (rospy.ServiceException) as e:
+        except rospy.ServiceException as e:
             print("/gazebo/unpause_physics service call failed")
 
         time.sleep(TIME_DELTA)
@@ -281,7 +280,7 @@ class GazeboEnv:
         rospy.wait_for_service("/gazebo/pause_physics")
         try:
             self.pause()
-        except (rospy.ServiceException) as e:
+        except rospy.ServiceException as e:
             print("/gazebo/pause_physics service call failed")
         v_state = []
         v_state[:] = self.velodyne_data[:]
@@ -433,7 +432,7 @@ class GazeboEnv:
     @staticmethod
     def get_reward(target, collision, action, min_laser):
         if target:
-            return 100.0
+            return 200.0
         elif collision:
             return -100.0
         else:
